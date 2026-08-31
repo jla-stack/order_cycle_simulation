@@ -37,5 +37,5 @@ However, as a visual sandbox to put a few ideas on paper and test user flows bef
 ## 🚀 How to Run It
 
 1. Clone or download this repo.
-2. Double-click `index.html` (or open it in any modern browser).
+2. Double-click `order-cycle_simulation.html` (or open it in any modern browser).
 3. Flip the **AUTO-ADVANCE** toggle to watch the simulated order cycle run.
