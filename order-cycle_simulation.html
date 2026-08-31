@@ -1,0 +1,1299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Order Cycle Simulation — Institutional Prototyping Engine</title>
+  <style>
+    /* ==========================================================================
+       GLOBAL STYLES & THEME VARIABLES
+       ========================================================================== */
+    :root {
+      --bg-main: #07090e;
+      --panel-bg: #0f131c;
+      --card-bg: #171d2a;
+      --row-even: #0f131c;
+      --row-odd: #141924;
+      --row-hover: rgba(49, 130, 206, 0.25);
+      --border-color: #2b3548;
+      --border-accent: #3182ce;
+      --border-subtle: #1e2636;
+      --text-primary: #f0f4f8;
+      --text-muted: #94a3b8;
+      --accent-blue: #38bdf8;
+      --accent-blue-hover: #0284c7;
+      
+      --status-pass: #4ade80;
+      --status-pass-bg: rgba(74, 222, 128, 0.12);
+      --status-hold: #fbbf24;
+      --status-hold-bg: rgba(251, 191, 36, 0.12);
+      --status-fail: #f87171;
+      --status-fail-bg: rgba(248, 113, 113, 0.12);
+      
+      --side-buy: #4ade80;
+      --side-sell: #f87171;
+      
+      --font-mono: Consolas, "SF Mono", "Liberation Mono", Menlo, monospace;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-main);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      line-height: 1.4;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* GRID LAYOUT: Maximize workspace, clamp logs to 110px */
+    .oms-container {
+      display: grid;
+      grid-template-rows: 44px 36px 1fr 110px;
+      height: 100vh;
+    }
+
+    /* ==========================================================================
+       1. HEADER
+       ========================================================================== */
+    .header {
+      background-color: var(--panel-bg);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+    }
+
+    .brand-zone {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo {
+      font-weight: 800;
+      font-size: 15px;
+      letter-spacing: 1px;
+      color: var(--accent-blue);
+      font-family: var(--font-mono);
+    }
+
+    .environment-tag {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+
+    .automation-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .control-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      letter-spacing: 0.5px;
+    }
+
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 34px;
+      height: 18px;
+    }
+
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      transition: .2s;
+      border-radius: 20px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 10px;
+      width: 10px;
+      left: 3px;
+      bottom: 3px;
+      background-color: var(--text-muted);
+      transition: .2s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      background-color: var(--accent-blue);
+      border-color: var(--accent-blue);
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(16px);
+      background-color: #fff;
+    }
+
+    .speed-select {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+
+    .timer-badge {
+      background-color: var(--status-hold-bg);
+      border: 1px solid var(--status-hold);
+      color: var(--status-hold);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 3px;
+      display: none;
+    }
+
+    /* ==========================================================================
+       2. CTEPS_LIST
+       ========================================================================== */
+    .cteps_list {
+      background-color: var(--panel-bg);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      overflow-x: auto;
+    }
+
+    .state-btn {
+      background: none;
+      border: none;
+      border-right: 1px solid var(--border-color);
+      color: var(--text-muted);
+      padding: 0 14px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .state-btn:hover {
+      background-color: var(--card-bg);
+      color: var(--text-primary);
+    }
+
+    .state-btn.active {
+      background-color: var(--bg-main);
+      color: var(--accent-blue);
+      border-bottom: 2px solid var(--accent-blue);
+    }
+
+    .state-dot {
+      font-size: 8px;
+      color: var(--border-color);
+    }
+
+    .state-btn.active .state-dot {
+      color: var(--accent-blue);
+    }
+
+    /* ==========================================================================
+       3. WORKSPACE VIEWPORT & HIGHLIGHTED BLOTTER
+       ========================================================================== */
+    .workspace-viewport {
+      padding: 12px;
+      overflow: hidden;
+      background-color: var(--bg-main);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      height: 100%;
+    }
+
+    /* Banner */
+    .current_state {
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background-color: var(--panel-bg);
+      flex-shrink: 0;
+    }
+
+    .current_state.status-draft { border-left: 5px solid var(--text-muted); }
+    .current_state.status-generated { border-left: 5px solid var(--accent-blue); background-color: rgba(56, 189, 248, 0.05); }
+    .current_state.status-warning { border-left: 5px solid var(--status-fail); background-color: rgba(248, 113, 113, 0.05); }
+    .current_state.status-pending { border-left: 5px solid var(--status-hold); background-color: rgba(251, 191, 36, 0.05); }
+    .current_state.status-active { border-left: 5px solid var(--accent-blue); background-color: rgba(56, 189, 248, 0.05); }
+    .current_state.status-complete { border-left: 5px solid var(--status-pass); background-color: rgba(74, 222, 128, 0.05); }
+
+    .state-title .label {
+      font-size: 10px;
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      letter-spacing: 1px;
+    }
+
+    .state-title h1 {
+      font-size: 14px;
+      font-weight: 700;
+      margin-top: 1px;
+      font-family: var(--font-mono);
+    }
+
+    .state-badge {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 3px;
+      text-transform: uppercase;
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+    }
+
+    .state-badge.hold { color: var(--status-hold); border-color: var(--status-hold); background-color: var(--status-hold-bg); }
+    .state-badge.active { color: var(--accent-blue); border-color: var(--accent-blue); background-color: rgba(56, 189, 248, 0.15); }
+    .state-badge.pass { color: var(--status-pass); border-color: var(--status-pass); background-color: var(--status-pass-bg); }
+
+    /* Workspace Layout - Blotter expands full height */
+    .main-workspace-layout {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 12px;
+      align-items: stretch;
+      flex: 1;
+      min-height: 0;
+    }
+
+    #blotterViewport {
+      height: 100%;
+      min-height: 0;
+    }
+
+    .state-panel {
+      display: none;
+      height: 100%;
+    }
+
+    .state-panel.active {
+      display: block;
+      height: 100%;
+    }
+
+    /* HIGH-VISIBILITY HERO BLOTTER CONTAINER */
+    .blotter {
+      background-color: var(--panel-bg);
+      border: 1px solid var(--border-accent);
+      box-shadow: 0 0 15px rgba(49, 130, 206, 0.15);
+      border-radius: 4px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    .blotter-meta-bar {
+      background-color: #1a2332;
+      border-bottom: 1px solid var(--border-color);
+      padding: 10px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      flex-shrink: 0;
+    }
+
+    .blotter-meta-bar .title {
+      font-weight: 800;
+      color: var(--accent-blue);
+      font-size: 13px;
+      letter-spacing: 1px;
+    }
+
+    .blotter-table-wrapper {
+      overflow: auto;
+      flex: 1;
+    }
+
+    /* ENLARGED PRO TABLE WITH READABLE TYPOGRAPHY & SPACING */
+    .pro-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--font-mono);
+      font-size: 13px;
+    }
+
+    .pro-table th {
+      text-align: left;
+      color: var(--text-muted);
+      padding: 10px 14px;
+      background-color: #121824;
+      border-bottom: 2px solid var(--border-color);
+      font-weight: 700;
+      font-size: 11px;
+      text-transform: uppercase;
+      white-space: nowrap;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+
+    .pro-table th.num, .pro-table td.num {
+      text-align: right;
+    }
+
+    .pro-table tbody tr {
+      background-color: var(--row-even);
+      border-bottom: 1px solid var(--border-subtle);
+      transition: background 0.1s;
+    }
+
+    .pro-table tbody tr:nth-child(odd) {
+      background-color: var(--row-odd);
+    }
+
+    .pro-table tbody tr:hover {
+      background-color: var(--row-hover);
+    }
+
+    .pro-table td {
+      padding: 9px 14px;
+      white-space: nowrap;
+      color: var(--text-primary);
+    }
+
+    .pro-table td.symbol {
+      font-weight: bold;
+      color: var(--accent-blue);
+    }
+
+    .pro-table td.pos-green { color: var(--status-pass); font-weight: bold; }
+    .pro-table td.neg-red { color: var(--status-fail); font-weight: bold; }
+
+    /* Micro Badges */
+    .badge {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      padding: 3px 8px;
+      border-radius: 3px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .badge.pass { background-color: var(--status-pass-bg); color: var(--status-pass); border: 1px solid var(--status-pass); }
+    .badge.hold { background-color: var(--status-hold-bg); color: var(--status-hold); border: 1px solid var(--status-hold); }
+    .badge.fail { background-color: var(--status-fail-bg); color: var(--status-fail); border: 1px solid var(--status-fail); }
+
+    .side-tag {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 3px;
+      font-size: 10px;
+    }
+    .side-tag.buy { background-color: rgba(74, 222, 128, 0.15); color: var(--side-buy); border: 1px solid var(--side-buy); }
+    .side-tag.sell { background-color: rgba(248, 113, 113, 0.15); color: var(--side-sell); border: 1px solid var(--side-sell); }
+
+    /* action_box */
+    .action_box {
+      background-color: var(--panel-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      height: 100%;
+    }
+
+    .action_box h3 {
+      font-size: 12px;
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--accent-blue);
+      margin-bottom: 12px;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 6px;
+    }
+
+    .action-description {
+      color: var(--text-muted);
+      font-size: 12px;
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
+
+    .action-explanation-box {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-left: 3px solid var(--accent-blue);
+      padding: 10px 12px;
+      border-radius: 3px;
+      margin-bottom: 16px;
+      font-size: 11px;
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+    }
+
+    /* Buttons */
+    .action-btn {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      padding: 12px 16px;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      border-radius: 3px;
+      cursor: pointer;
+      width: 100%;
+      transition: background 0.15s;
+    }
+
+    .action-btn:hover { background-color: var(--border-color); }
+    .action-btn.primary { background-color: #0284c7; border-color: #0284c7; color: #fff; }
+    .action-btn.primary:hover { background-color: #0369a1; }
+    .action-btn.warning { background-color: var(--status-hold); border-color: var(--status-hold); color: #000; }
+    .action-btn.success { background-color: #16a34a; border-color: #16a34a; color: #fff; }
+
+    /* Progress Bar */
+    .progress-bar-container {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 3px;
+      height: 24px;
+      width: 100%;
+      overflow: hidden;
+      margin-bottom: 10px;
+    }
+
+    .progress-bar-fill {
+      background-color: #16a34a;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: bold;
+      color: #fff;
+    }
+
+    /* ==========================================================================
+       4. COMPACT FOOTER LOGS (110px FIXED HEIGHT)
+       ========================================================================== */
+    .footer-terminal {
+      background-color: var(--panel-bg);
+      border-top: 1px solid var(--border-color);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      height: 110px;
+    }
+
+    .terminal-column {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      border-right: 1px solid var(--border-color);
+      overflow: hidden;
+    }
+
+    .terminal-column:last-child {
+      border-right: none;
+    }
+
+    .terminal-bar {
+      background-color: var(--card-bg);
+      padding: 4px 10px;
+      font-size: 9px;
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      font-weight: 700;
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+
+    .terminal-log-output {
+      padding: 6px 10px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .log-line {
+      margin-bottom: 2px;
+      color: var(--text-muted);
+    }
+
+    .log-line code { color: var(--text-primary); }
+    .log-line.warn code { color: var(--status-hold); }
+    .log-line.err code { color: var(--status-fail); }
+
+    .ext-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--font-mono);
+      font-size: 9px;
+    }
+
+    .ext-table th {
+      text-align: left;
+      color: var(--text-muted);
+      padding: 2px 4px;
+      border-bottom: 1px solid var(--border-color);
+      text-transform: uppercase;
+    }
+
+    .ext-table td {
+      padding: 2px 4px;
+      border-bottom: 1px solid rgba(45, 55, 72, 0.4);
+    }
+
+    .broker-tag {
+      color: var(--accent-blue);
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+
+<div class="oms-container">
+
+  <!-- 1. HEADER -->
+  <header class="header">
+    <div class="brand-zone">
+      <span class="logo">ORDER CYCLE SIMULATION</span>
+      <span class="environment-tag">FINTECH POC ENGINE</span>
+    </div>
+    
+    <div class="automation-controls">
+      <label class="toggle-switch">
+        <input type="checkbox" id="autoAdvanceToggle">
+        <span class="slider"></span>
+      </label>
+      <span class="control-label">AUTO-ADVANCE</span>
+
+      <select id="speedSelect" class="speed-select">
+        <option value="3">3s Interval</option>
+        <option value="5" selected>5s Interval</option>
+        <option value="10">10s Interval</option>
+      </select>
+
+      <div id="autoTimerDisplay" class="timer-badge">NEXT STATE IN: <span id="countdownSecs">5</span>s</div>
+    </div>
+  </header>
+
+  <!-- 2. CTEPS_LIST -->
+  <nav class="cteps_list">
+    <button class="state-btn active" data-state="PORTFOLIO_MODELING">
+      <span class="state-dot">●</span> 1. MODELING
+    </button>
+    <button class="state-btn" data-state="ORDER_GENERATION_AND_BASKET_REVIEW">
+      <span class="state-dot">●</span> 2. BASKET REVIEW
+    </button>
+    <button class="state-btn" data-state="PRE_TRADE_COMPLIANCE">
+      <span class="state-dot">●</span> 3. COMPLIANCE
+    </button>
+    <button class="state-btn" data-state="OPERATIONAL_RISK_GATE">
+      <span class="state-dot">●</span> 4. RISK GATE
+    </button>
+    <button class="state-btn" data-state="TRADER_EXECUTION_STAGING">
+      <span class="state-dot">●</span> 5. TRADING DESK
+    </button>
+    <button class="state-btn" data-state="STREET_FIX_EXECUTION">
+      <span class="state-dot">●</span> 6. FIX EXECUTION
+    </button>
+    <button class="state-btn" data-state="TRADE_DATE_ALLOCATION">
+      <span class="state-dot">●</span> 7. ALLOCATION (T+0)
+    </button>
+    <button class="state-btn" data-state="CLEARING_AND_SETTLEMENT">
+      <span class="state-dot">●</span> 8. SETTLEMENT (T+1)
+    </button>
+    <button class="state-btn" data-state="POST_TRADE_RISK_SYNC">
+      <span class="state-dot">●</span> 9. RISK SYNC
+    </button>
+  </nav>
+
+  <!-- 3. WORKSPACE VIEWPORT -->
+  <main class="workspace-viewport">
+
+    <!-- current_state BANNER -->
+    <div id="current_state" class="current_state status-draft">
+      <div class="state-title">
+        <span class="label">ACTIVE LIFECYCLE STATE:</span>
+        <h1 id="stateTitleText">STATE: PORTFOLIO MODELING & REBALANCE CALCULATOR</h1>
+      </div>
+      <div id="stateBadgeText" class="state-badge">STATE 1 / 9: UNCOMMITTED MODEL DRAFT</div>
+    </div>
+
+    <!-- MAIN SECTION -->
+    <div class="main-workspace-layout">
+
+      <!-- Dynamic blotter Panel Viewport -->
+      <div id="blotterViewport">
+
+        <!-- STATE 1: MODELING (Expanded Rows) -->
+        <div id="panel-PORTFOLIO_MODELING" class="state-panel active">
+          <div class="blotter">
+            <div class="blotter-meta-bar">
+              <span class="title">PORTFOLIO REBALANCE MODELING GRID</span>
+              <span>8 ACCOUNTS SELECTED | STRATEGY: GLOBAL MULTI-ASSET REBALANCE</span>
+            </div>
+            <div class="blotter-table-wrapper">
+              <table class="pro-table">
+                <thead>
+                  <tr>
+                    <th>Account</th>
+                    <th>Strategy Name</th>
+                    <th class="num">Cash Balance</th>
+                    <th class="num">Curr Wgt %</th>
+                    <th class="num">Tgt Wgt %</th>
+                    <th>Target Symbol</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td class="symbol">ACC-101</td><td>Global Growth Fund</td><td class="num">$1,250,000.00</td><td class="num">2.1%</td><td class="num pos-green">5.0%</td><td class="symbol">TKR-GREEN</td></tr>
+                  <tr><td class="symbol">ACC-102</td><td>ESG Balanced Fund</td><td class="num">$840,000.00</td><td class="num">1.5%</td><td class="num pos-green">4.0%</td><td class="symbol">TKR-GREEN</td></tr>
+                  <tr><td class="symbol">ACC-103</td><td>Clean Tech Alpha</td><td class="num">$410,000.00</td><td class="num">8.0%</td><td class="num pos-green">12.0%</td><td class="symbol">TKR-GREEN</td></tr>
+                  <tr><td class="symbol">ACC-104</td><td>US Tech LargeCap</td><td class="num">$3,100,000.00</td><td class="num">4.2%</td><td class="num pos-green">6.5%</td><td class="symbol">NVDA</td></tr>
+                  <tr><td class="symbol">ACC-105</td><td>Blue Chip Core</td><td class="num">$1,950,000.00</td><td class="num">3.0%</td><td class="num pos-green">5.0%</td><td class="symbol">AAPL</td></tr>
+                  <tr><td class="symbol">ACC-106</td><td>SaaS Growth Lead</td><td class="num">$620,000.00</td><td class="num">1.8%</td><td class="num pos-green">3.5%</td><td class="symbol">MSFT</td></tr>
+                  <tr><td class="symbol">ACC-107</td><td>Institutional Alpha</td><td class="num">$4,500,000.00</td><td class="num">5.5%</td><td class="num pos-green">8.0%</td><td class="symbol">AMZN</td></tr>
+                  <tr><td class="symbol">ACC-108</td><td>Global Energy Transition</td><td class="num">$780,000.00</td><td class="num">2.0%</td><td class="num pos-green">4.5%</td><td class="symbol">TSLA</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- STATE 2: BASKET REVIEW (Expanded Rows) -->
+        <div id="panel-ORDER_GENERATION_AND_BASKET_REVIEW" class="state-panel">
+          <div class="blotter">
+            <div class="blotter-meta-bar">
+              <span class="title">STAGED ORDER BASKET (NETTED)</span>
+              <span>TOTAL NOTIONAL: $11,480,000.00 | 8 ORDERS</span>
+            </div>
+            <div class="blotter-table-wrapper">
+              <table class="pro-table">
+                <thead>
+                  <tr>
+                    <th>Order Ref</th>
+                    <th>Account</th>
+                    <th>Side</th>
+                    <th>Symbol</th>
+                    <th class="num">Shares</th>
+                    <th class="num">Est. Price</th>
+                    <th class="num">Notional Value</th>
+                    <th>Fund Source</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td class="symbol">ORD-GEN-01</td><td>ACC-101</td><td><span class="side-tag buy">BUY</span></td><td class="symbol">TKR-GREEN</td><td class="num pos-green">+50,000</td><td class="num">$18.15</td><td class="num">$907,500.00</td><td>Cash Reserve</td></tr>
+                  <tr><td class="symbol">ORD-GEN-02</td><td>ACC-102</td><td><span class="side-tag buy">BUY</span></td><td class="symbol">TKR-GREEN</td><td class="num pos-green">+30,000</td><td class="num">$18.15</td><td class="num">$544,500.00</td><td>Cash Reserve</td></tr>
+                  <tr><td class="symbol">ORD-GEN-03</td><td>ACC-103</td><td><span class="side-tag buy">BUY</span></td><td class="symbol">TKR-GREEN</td><td class="num pos-green">+20,000</td><td class="num">$18.15</td><td class="num">$363,000.00</td><td>Reinvested Proceeds</td></tr>
+                  <tr><td class="symbol">ORD-GEN-04</td><td>ACC-103</td><td><span class="side-tag sell">SELL</span></td><td class="symbol">TKR-LEGACY</td><td class="num neg-red">-15,000</td><td class="num">$24.20</td><td class="num">$363,000.00</td><td>Divestment Proceed</td></tr>
+                  <tr><td class="symbol">ORD-GEN-05</td><td>ACC-104</td><td><span class="side-tag buy">BUY</span></td><td class="symbol">NVDA</td><td class="num pos-green">+12,500</td><td class="num">$128.40</td><td class="num">$1,605,000.00</td><td>Cash Reserve</td></tr>
+                  <tr><td class="symbol">ORD-GEN-06</td><td>ACC-105</td><td><span class="side-tag buy">BUY</span></td><td class="symbol">AAPL</td><td class="num pos-green">+18,000</td><td class="num">$225.10</td><td class="num">$4,051,800.00</td><td>Cash Reserve</td></tr>
+                  <tr><td class="symbol">ORD-GEN-07</td><td>ACC-106</td><td><span class="side-tag buy">BUY</span></td><td class="symbol">MSFT</td><td class="num pos-green">+5,000</td><td class="num">$448.20</td><td class="num">$2,241,000.00</td><td>Cash Reserve</td></tr>
+                  <tr><td class="symbol">ORD-GEN-08</td><td>ACC-107</td><td><span class="side-tag buy">BUY</span></td><td class="symbol">AMZN</td><td class="num pos-green">+8,000</td><td class="num">$175.50</td><td class="num">$1,404,000.00</td><td>Cash Reserve</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- STATE 3: COMPLIANCE (Expanded Rows) -->
+        <div id="panel-PRE_TRADE_COMPLIANCE" class="state-panel">
+          <div class="blotter">
+            <div class="blotter-meta-bar">
+              <span class="title">PRE-TRADE COMPLIANCE MATRIX</span>
+              <span>1 FAILURE DETECTED | AUDIT OVERRIDE REQUIRED</span>
+            </div>
+            <div class="blotter-table-wrapper">
+              <table class="pro-table">
+                <thead>
+                  <tr>
+                    <th>Rule ID</th>
+                    <th>Scope</th>
+                    <th>Rule Description</th>
+                    <th>Status</th>
+                    <th>Breach Detail</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td class="symbol">RULE-RESTRICTED</td><td>Firm Level</td><td>Global Restricted / Insider List</td><td><span class="badge pass">PASS</span></td><td>None</td></tr>
+                  <tr><td class="symbol">RULE-UCITS-51040</td><td>Regulatory</td><td>UCITS 5/10/40 Concentration Rule</td><td><span class="badge pass">PASS</span></td><td>None</td></tr>
+                  <tr><td class="symbol">RULE-IPS-MAXASSET</td><td>Client Mandate</td><td>Max 10% Position Cap (ACC-103)</td><td><span class="badge fail">FAIL / BREACH</span></td><td class="neg-red">12.0% Target exceeds 10.0% IPS Limit</td></tr>
+                  <tr><td class="symbol">RULE-SHORT-SELL</td><td>Regulatory</td><td>SEC Rule 201 Short Sale Locates</td><td><span class="badge pass">PASS</span></td><td>Locate Confirmed</td></tr>
+                  <tr><td class="symbol">RULE-ESG-EXCLUSION</td><td>Mandate</td><td>Weaponry & Tobacco Exclusion Screening</td><td><span class="badge pass">PASS</span></td><td>None</td></tr>
+                  <tr><td class="symbol">RULE-LIQUIDITY-CAP</td><td>Risk Policy</td><td>Max 20% ADV Participation Cap</td><td><span class="badge pass">PASS</span></td><td>12.5% ADV calculated</td></tr>
+                  <tr><td class="symbol">RULE-FX-EXPOSURE</td><td>Risk Policy</td><td>Unhedged Currency Limit (EUR/USD)</td><td><span class="badge pass">PASS</span></td><td>Within ±2.0% Band</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- STATE 4: RISK GATE (Expanded Rows) -->
+        <div id="panel-OPERATIONAL_RISK_GATE" class="state-panel">
+          <div class="blotter">
+            <div class="blotter-meta-bar">
+              <span class="title">PRE-STREET OPERATIONAL RISK GATE</span>
+              <span>6 CHECKS EVALUATED | 1 RISK HOLD</span>
+            </div>
+            <div class="blotter-table-wrapper">
+              <table class="pro-table">
+                <thead>
+                  <tr>
+                    <th>Risk Gate Check</th>
+                    <th class="num">Threshold / Limit</th>
+                    <th class="num">Calculated Value</th>
+                    <th>Gate Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td class="symbol">Single Order Notional Limit</td><td class="num">$10,000,000.00 Cap</td><td class="num">$4,051,800.00</td><td><span class="badge pass">PASS</span></td></tr>
+                  <tr><td class="symbol">Fat-Finger Price Deviation Collar</td><td class="num">±1.00% vs BBO</td><td class="num">0.25% Deviation</td><td><span class="badge pass">PASS</span></td></tr>
+                  <tr><td class="symbol">30-Day ADV Participation Threshold</td><td class="num">10.0% ADV Cap</td><td class="num neg-red">12.5% ADV Impact</td><td><span class="badge hold">RISK HOLD</span></td></tr>
+                  <tr><td class="symbol">Credit Counterparty Limit</td><td class="num">$50,000,000.00 Cap</td><td class="num">$11,480,000.00</td><td><span class="badge pass">PASS</span></td></tr>
+                  <tr><td class="symbol">Duplicate Order Engine Check</td><td class="num">Same Hash 30s</td><td class="num">Unique Signature</td><td><span class="badge pass">PASS</span></td></tr>
+                  <tr><td class="symbol">Volatility Index Circuit Breaker</td><td class="num">VIX &lt; 35.0</td><td class="num">16.4 VIX Current</td><td><span class="badge pass">PASS</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- STATE 5: TRADING DESK (Expanded Rows) -->
+        <div id="panel-TRADER_EXECUTION_STAGING" class="state-panel">
+          <div class="blotter">
+            <div class="blotter-meta-bar">
+              <span class="title">TRADER BLOCK ROUTING BLOTTER</span>
+              <span>6 BLOCK ORDERS STAGED FOR STREET ROUTING</span>
+            </div>
+            <div class="blotter-table-wrapper">
+              <table class="pro-table">
+                <thead>
+                  <tr>
+                    <th>Block ID</th>
+                    <th>Symbol</th>
+                    <th>Side</th>
+                    <th class="num">Aggregated Qty</th>
+                    <th>Type</th>
+                    <th class="num">Limit Price</th>
+                    <th>Algo Strategy</th>
+                    <th>Target Venue</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td class="symbol">BLK-2026-99</td><td class="symbol">TKR-GREEN</td><td><span class="side-tag buy">BUY</span></td><td class="num pos-green">100,000</td><td>Limit</td><td class="num">$18.15</td><td>TWAP (3-Day Slice)</td><td>Morgan Stanley EMS</td></tr>
+                  <tr><td class="symbol">BLK-2026-100</td><td class="symbol">TKR-LEGACY</td><td><span class="side-tag sell">SELL</span></td><td class="num neg-red">15,000</td><td>Market</td><td class="num">MKT</td><td>DMA</td><td>Goldman Sachs EMS</td></tr>
+                  <tr><td class="symbol">BLK-2026-101</td><td class="symbol">NVDA</td><td><span class="side-tag buy">BUY</span></td><td class="num pos-green">12,500</td><td>Limit</td><td class="num">$128.40</td><td>VWAP Day</td><td>JPMorgan EMS</td></tr>
+                  <tr><td class="symbol">BLK-2026-102</td><td class="symbol">AAPL</td><td><span class="side-tag buy">BUY</span></td><td class="num pos-green">18,000</td><td>Limit</td><td class="num">$225.10</td><td>POV 15%</td><td>UBS Dark Pool</td></tr>
+                  <tr><td class="symbol">BLK-2026-103</td><td class="symbol">MSFT</td><td><span class="side-tag buy">BUY</span></td><td class="num pos-green">5,000</td><td>Market</td><td class="num">MKT</td><td>TWAP 1-Hour</td><td>Citigroup EMS</td></tr>
+                  <tr><td class="symbol">BLK-2026-104</td><td class="symbol">AMZN</td><td><span class="side-tag buy">BUY</span></td><td class="num pos-green">8,000</td><td>Limit</td><td class="num">$175.50</td><td>Implementation Shortfall</td><td>BofA Securities</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- STATE 6: FIX EXECUTION (Expanded Rows) -->
+        <div id="panel-STREET_FIX_EXECUTION" class="state-panel">
+          <div class="blotter">
+            <div class="blotter-meta-bar">
+              <span class="title">REAL-TIME STREET EXECUTION FILLS</span>
+              <span>VWAP: $18.1500 | STATUS: 100% FILLED</span>
+            </div>
+            <div style="padding: 10px 14px 4px 14px;">
+              <div class="progress-bar-container">
+                <div class="progress-bar-fill" style="width: 100%;">100% FILLED (100,000 / 100,000 Shares)</div>
+              </div>
+            </div>
+            <div class="blotter-table-wrapper">
+              <table class="pro-table">
+                <thead>
+                  <tr>
+                    <th>Exec ID</th>
+                    <th>Broker Venue</th>
+                    <th class="num">Fill Qty</th>
+                    <th class="num">Fill Price</th>
+                    <th class="num">Time (UTC)</th>
+                    <th>FIX ExecType</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td class="symbol">EXEC-001</td><td>Morgan Stanley</td><td class="num pos-green">20,000</td><td class="num">$18.1400</td><td class="num">14:30:12</td><td>F (Trade Partial)</td></tr>
+                  <tr><td class="symbol">EXEC-002</td><td>Morgan Stanley</td><td class="num pos-green">25,000</td><td class="num">$18.1480</td><td class="num">14:45:00</td><td>F (Trade Partial)</td></tr>
+                  <tr><td class="symbol">EXEC-003</td><td>Morgan Stanley</td><td class="num pos-green">25,000</td><td class="num">$18.1520</td><td class="num">15:15:40</td><td>F (Trade Partial)</td></tr>
+                  <tr><td class="symbol">EXEC-004</td><td>Morgan Stanley</td><td class="num pos-green">15,000</td><td class="num">$18.1550</td><td class="num">15:38:10</td><td>F (Trade Partial)</td></tr>
+                  <tr><td class="symbol">EXEC-005</td><td>Morgan Stanley</td><td class="num pos-green">15,000</td><td class="num">$18.1580</td><td class="num">15:58:02</td><td>F (Trade Fill)</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- STATE 7: ALLOCATION (Expanded Rows) -->
+        <div id="panel-TRADE_DATE_ALLOCATION" class="state-panel">
+          <div class="blotter">
+            <div class="blotter-meta-bar">
+              <span class="title">MIDDLE OFFICE PRO-RATA ALLOCATION GRID</span>
+              <span>NET AVG PRICE: $18.1500 | TOTAL SHARES: 100,000</span>
+            </div>
+            <div class="blotter-table-wrapper">
+              <table class="pro-table">
+                <thead>
+                  <tr>
+                    <th>Account</th>
+                    <th class="num">Target Weight</th>
+                    <th class="num">Allocated Shares</th>
+                    <th class="num">Gross Amount</th>
+                    <th class="num">Est. Comm</th>
+                    <th class="num">Net Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td class="symbol">ACC-101</td><td class="num">50.0%</td><td class="num pos-green">50,000</td><td class="num">$907,500.00</td><td class="num">$250.00</td><td class="num">$907,750.00</td></tr>
+                  <tr><td class="symbol">ACC-102</td><td class="num">30.0%</td><td class="num pos-green">30,000</td><td class="num">$544,500.00</td><td class="num">$150.00</td><td class="num">$544,650.00</td></tr>
+                  <tr><td class="symbol">ACC-103</td><td class="num">20.0%</td><td class="num pos-green">20,000</td><td class="num">$363,000.00</td><td class="num">$100.00</td><td class="num">$363,100.00</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- STATE 8: SETTLEMENT (Expanded Rows) -->
+        <div id="panel-CLEARING_AND_SETTLEMENT" class="state-panel">
+          <div class="blotter">
+            <div class="blotter-meta-bar">
+              <span class="title">CUSTODY CLEARING & SETTLEMENT ENGINE</span>
+              <span>MODE: DvP (DELIVERY-VERSUS-PAYMENT) | T+1 CYCLE</span>
+            </div>
+            <div class="blotter-table-wrapper">
+              <table class="pro-table">
+                <thead>
+                  <tr>
+                    <th>Account</th>
+                    <th>Custodian Bank</th>
+                    <th>Instruction Format</th>
+                    <th>SWIFT / ISO Status</th>
+                    <th>Settlement Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td class="symbol">ACC-101</td><td>State Street</td><td>SWIFT MT543 (DvP)</td><td>MT548: SETT</td><td><span class="badge pass">SETTLED (T+1)</span></td></tr>
+                  <tr><td class="symbol">ACC-102</td><td>BNY Mellon</td><td>SWIFT MT543 (DvP)</td><td>MT548: SETT</td><td><span class="badge pass">SETTLED (T+1)</span></td></tr>
+                  <tr><td class="symbol">ACC-103</td><td>Northern Trust</td><td>ISO 20022 sese.023</td><td>sese.025: SETT</td><td><span class="badge pass">SETTLED (T+1)</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- STATE 9: RISK SYNC (Expanded Rows) -->
+        <div id="panel-POST_TRADE_RISK_SYNC" class="state-panel">
+          <div class="blotter">
+            <div class="blotter-meta-bar">
+              <span class="title">RECONCILED POST-TRADE RISK & FACTOR BASELINE</span>
+              <span>PORTFOLIO BASELINE SYNCHRONIZED</span>
+            </div>
+            <div class="blotter-table-wrapper">
+              <table class="pro-table">
+                <thead>
+                  <tr>
+                    <th>Risk Metric / Portfolio Factor</th>
+                    <th class="num">Pre-Trade Baseline</th>
+                    <th class="num">Post-Trade Reconciled</th>
+                    <th>Sync Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td class="symbol">Historical 1-Day 99% VaR</td><td class="num">$210,000.00</td><td class="num pos-green">$245,000.00</td><td><span class="badge pass">RECONCILED</span></td></tr>
+                  <tr><td class="symbol">Monte Carlo VaR (10k Iterations)</td><td class="num">$225,000.00</td><td class="num pos-green">$258,000.00</td><td><span class="badge pass">RECONCILED</span></td></tr>
+                  <tr><td class="symbol">Sector Concentration (Green Tech)</td><td class="num">4.50%</td><td class="num pos-green">7.80%</td><td><span class="badge pass">RECONCILED</span></td></tr>
+                  <tr><td class="symbol">Portfolio Beta vs S&P 500</td><td class="num">1.12</td><td class="num pos-green">1.18</td><td><span class="badge pass">RECONCILED</span></td></tr>
+                  <tr><td class="symbol">Liquidity Coverage Ratio (3-Day)</td><td class="num">92.4%</td><td class="num pos-green">95.1%</td><td><span class="badge pass">RECONCILED</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Pinned action_box -->
+      <div class="action_box">
+        <div>
+          <h3>ACTION CONTROL PANEL</h3>
+          <div id="actionExplanation" class="action-explanation-box">
+            Calculate target allocation deltas across all participating portfolio accounts.
+          </div>
+          <div id="actionDescription" class="action-description">
+            Initiates the portfolio rebalance model calculation engine.
+          </div>
+        </div>
+        <button id="mainActionButton" class="action-btn primary" onclick="handleManualActionClick()">
+          RUN REBALANCE & GENERATE ORDERS →
+        </button>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- 4. FOOTER LOGS -->
+  <footer class="footer-terminal">
+    
+    <!-- LEFT: int_messages -->
+    <div class="terminal-column">
+      <div class="terminal-bar">
+        <span>int_messages (INTERNAL AUDIT LOGS & STATE LOGIC)</span>
+        <span>SYSTEM READOUT</span>
+      </div>
+      <div id="intMessagesLog" class="terminal-log-output">
+        <div class="log-line"><code>[SYSTEM_INIT] Order Cycle Simulation initialized. Active state: PORTFOLIO_MODELING.</code></div>
+      </div>
+    </div>
+
+    <!-- RIGHT: ext_messages -->
+    <div class="terminal-column">
+      <div class="terminal-bar">
+        <span>ext_messages (EXTERNAL PROTOCOL GATEWAY)</span>
+        <span>GATEWAY ONLINE</span>
+      </div>
+      <div class="terminal-log-output">
+        <table class="ext-table">
+          <thead>
+            <tr><th>Timestamp</th><th>Target</th><th>Protocol Payload Detail</th></tr>
+          </thead>
+          <tbody id="extLogTableBody">
+            <tr><td>14:30:00.000</td><td><span class="broker-tag">GATEWAY</span></td><td>SESSION_INIT: Listening on FIX 4.2 / SWIFT MT548 Gateway</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </footer>
+
+</div>
+
+<!-- SCRIPT ENGINE -->
+<script>
+  let currentStateName = 'PORTFOLIO_MODELING';
+  let autoAdvanceTimer = null;
+  let countdownInterval = null;
+  let remainingSeconds = 5;
+
+  const STATE_CONFIGS = {
+    'PORTFOLIO_MODELING': {
+      title: 'STATE: PORTFOLIO MODELING & REBALANCE CALCULATOR',
+      badge: 'STATE 1 / 9: UNCOMMITTED MODEL DRAFT',
+      badgeClass: 'status-draft',
+      badgeTagClass: '',
+      explanation: 'Portfolio Manager calculates asset weight deltas to align cash balances with investment strategy targets.',
+      description: 'Run the rebalance model to compute exact order quantities across all accounts.',
+      buttonText: 'RUN REBALANCE & GENERATE ORDERS →',
+      buttonClass: 'primary',
+      nextState: 'ORDER_GENERATION_AND_BASKET_REVIEW',
+      intLog: 'MODEL ENGINE -> Portfolio target weights defined. Calculating multi-account deltas.',
+      extTarget: null,
+      extPayload: null
+    },
+    'ORDER_GENERATION_AND_BASKET_REVIEW': {
+      title: 'STATE: PROPOSED ORDER BASKET GENERATION & NETTING REVIEW',
+      badge: 'STATE 2 / 9: PROPOSED BASKET STAGED',
+      badgeClass: 'status-generated',
+      badgeTagClass: 'active',
+      explanation: 'Order generation engine nets trades internally and groups buy/sell targets into a staging basket.',
+      description: 'Review calculated buy/sell quantities and release order basket to pre-trade compliance checks.',
+      buttonText: 'RELEASE ORDER BASKET TO COMPLIANCE →',
+      buttonClass: 'primary',
+      nextState: 'PRE_TRADE_COMPLIANCE',
+      intLog: 'BASKET GEN -> Proposed basket created: 7 BUY orders, 1 SELL order (internal netting applied).',
+      extTarget: null,
+      extPayload: null
+    },
+    'PRE_TRADE_COMPLIANCE': {
+      title: 'STATE: PRE-TRADE COMPLIANCE EVALUATION',
+      badge: 'STATE 3 / 9: COMPLIANCE BREACH HOLD',
+      badgeClass: 'status-warning',
+      badgeTagClass: 'hold',
+      explanation: 'Pre-trade compliance engine detected a mandate breach: Account ACC-103 exceeds 10% position limit.',
+      description: 'Compliance Officer evaluates audit exception and executes regulatory override code.',
+      buttonText: 'EXECUTE OVERRIDE & AUTHORIZE →',
+      buttonClass: 'warning',
+      nextState: 'OPERATIONAL_RISK_GATE',
+      intLog: 'AUDIT ALERT -> Rule RULE-IPS-MAXASSET breach on ACC-103. Compliance override executed.',
+      extTarget: null,
+      extPayload: null
+    },
+    'OPERATIONAL_RISK_GATE': {
+      title: 'STATE: PRE-STREET OPERATIONAL RISK GATE',
+      badge: 'STATE 4 / 9: ADV LIMIT RISK HOLD',
+      badgeClass: 'status-pending',
+      badgeTagClass: 'hold',
+      explanation: 'Order size (100k shares) represents 12.5% of 30-day ADV, exceeding the 10.0% low-impact threshold.',
+      description: 'Chief Risk Officer authorizes conditional TWAP algorithmic slicing to mitigate market impact.',
+      buttonText: 'APPROVE CONDITIONAL TWAP SLICING →',
+      buttonClass: 'warning',
+      nextState: 'TRADER_EXECUTION_STAGING',
+      intLog: 'RISK GATE -> 12.5% ADV limit breach approved for TWAP algorithm slicing by CRO.',
+      extTarget: null,
+      extPayload: null
+    },
+    'TRADER_EXECUTION_STAGING': {
+      title: 'STATE: TRADER EXECUTION & ROUTING BLOTTER',
+      badge: 'STATE 5 / 9: READY FOR ROUTING',
+      badgeClass: 'status-active',
+      badgeTagClass: 'active',
+      explanation: 'Head Trader aggregates account orders into parent blocks and assigns Morgan Stanley EMS via FIX protocol.',
+      description: 'Transmit FIX New Order Single (MsgType=D) to broker execution algorithms.',
+      buttonText: 'TRANSMIT FIX MSG (NEW ORDER SINGLE) →',
+      buttonClass: 'success',
+      nextState: 'STREET_FIX_EXECUTION',
+      intLog: 'TRADING DESK -> Block order BLK-2026-99 assigned to Morgan Stanley TWAP algo.',
+      extTarget: 'Morgan Stanley',
+      extPayload: 'FIX OUT -> MsgType=D (New Order Single) | ClOrdID=BLK-2026-99 | Qty=100000 | Price=18.15'
+    },
+    'STREET_FIX_EXECUTION': {
+      title: 'STATE: STREET FIX EXECUTION & FILLS',
+      badge: 'STATE 6 / 9: EXECUTING ON STREET',
+      badgeClass: 'status-active',
+      badgeTagClass: 'active',
+      explanation: 'Morgan Stanley TWAP algo executes fills across street venues, streaming execution reports back via FIX.',
+      description: 'Confirm full execution fill (100,000 shares @ VWAP $18.1500) and send to Middle Office.',
+      buttonText: 'SEND TO MIDDLE OFFICE ALLOCATION →',
+      buttonClass: 'primary',
+      nextState: 'TRADE_DATE_ALLOCATION',
+      intLog: 'STREET EXEC -> Block order 100% filled at VWAP $18.1500 across 5 execution slices.',
+      extTarget: 'Morgan Stanley',
+      extPayload: 'FIX IN <- MsgType=8 (Execution Report) | OrdStatus=2 (Filled) | AvgPx=18.1500 | ExecID=EXEC-005'
+    },
+    'TRADE_DATE_ALLOCATION': {
+      title: 'STATE: TRADE-DATE ALLOCATION ENGINE (T+0)',
+      badge: 'STATE 7 / 9: ALLOCATING PRO-RATA',
+      badgeClass: 'status-active',
+      badgeTagClass: 'active',
+      explanation: 'Middle office allocation engine splits block execution pro-rata across participating accounts at net price.',
+      description: 'Transmit allocation instructions via FIX MsgType=J and DTCC CTM trade matching system.',
+      buttonText: 'TRANSMIT ALLOCATION (FIX MsgType=J) →',
+      buttonClass: 'primary',
+      nextState: 'CLEARING_AND_SETTLEMENT',
+      intLog: 'MIDDLE OFFICE -> Pro-rata allocations calculated for ACC-101, ACC-102, and ACC-103.',
+      extTarget: 'DTCC / CTM',
+      extPayload: 'FIX OUT -> MsgType=J (Allocation Instruction) | AllocID=ALLOC-2026-99 | TotalQty=100000'
+    },
+    'CLEARING_AND_SETTLEMENT': {
+      title: 'STATE: CLEARING & CUSTODY SETTLEMENT (T+1)',
+      badge: 'STATE 8 / 9: SETTLED & CONFIRMED',
+      badgeClass: 'status-complete',
+      badgeTagClass: 'pass',
+      explanation: 'Custodians process Delivery-versus-Payment (DvP) clearing instructions via SWIFT MT543 / ISO 20022 messages.',
+      description: 'Confirm settlement confirmations (MT548: SETT) and post trade to accounting ledgers.',
+      buttonText: 'POST TO POSITION & CASH LEDGERS →',
+      buttonClass: 'primary',
+      nextState: 'POST_TRADE_RISK_SYNC',
+      intLog: 'CLEARING -> Custodians State Street, BNY Mellon, and Northern Trust confirm T+1 settlement.',
+      extTarget: 'SWIFT / Custody',
+      extPayload: 'SWIFT IN <- MT548 (Settlement Confirmation) | Status=SETT | Settlement Date=T+1'
+    },
+    'POST_TRADE_RISK_SYNC': {
+      title: 'STATE: POST-TRADE RISK & BASELINE SYNC',
+      badge: 'STATE 9 / 9: CLOSED-LOOP COMPLETE',
+      badgeClass: 'status-complete',
+      badgeTagClass: 'pass',
+      explanation: 'Closed-loop synchronization reconciles portfolio cash balances, security positions, and VaR models.',
+      description: 'Complete the lifecycle run and reset the simulation to State 1.',
+      buttonText: '↺ RESTART LIFECYCLE SIMULATION',
+      buttonClass: 'success',
+      nextState: 'PORTFOLIO_MODELING',
+      intLog: 'RISK SYNC -> IBOR/ABOR positions reconciled. Closed-loop baseline updated.',
+      extTarget: null,
+      extPayload: null
+    }
+  };
+
+  function switchState(targetStateName) {
+    if (currentStateName === 'POST_TRADE_RISK_SYNC' && targetStateName === 'PORTFOLIO_MODELING') {
+      clearLogsOnLoop();
+    }
+
+    currentStateName = targetStateName;
+    const config = STATE_CONFIGS[targetStateName];
+
+    // 1. Navigation Bar
+    document.querySelectorAll('.state-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-state') === targetStateName);
+    });
+
+    // 2. Banner
+    const stateBanner = document.getElementById('current_state');
+    stateBanner.className = `current_state ${config.badgeClass}`;
+    document.getElementById('stateTitleText').innerText = config.title;
+    
+    const stateBadge = document.getElementById('stateBadgeText');
+    stateBadge.innerText = config.badge;
+    stateBadge.className = `state-badge ${config.badgeTagClass}`;
+
+    // 3. Active Panel
+    document.querySelectorAll('.state-panel').forEach(panel => {
+      panel.classList.remove('active');
+    });
+    document.getElementById(`panel-${targetStateName}`).classList.add('active');
+
+    // 4. action_box
+    document.getElementById('actionExplanation').innerText = config.explanation;
+    document.getElementById('actionDescription').innerText = config.description;
+    
+    const actionBtn = document.getElementById('mainActionButton');
+    actionBtn.innerText = config.buttonText;
+    actionBtn.className = `action-btn ${config.buttonClass}`;
+
+    // 5. Append Logs
+    if (config.intLog) {
+      appendIntMessage(config.intLog);
+    }
+    if (config.extTarget && config.extPayload) {
+      appendExtLog(config.extTarget, config.extPayload);
+    }
+
+    // 6. Reset Timer
+    resetCountdown();
+  }
+
+  function clearLogsOnLoop() {
+    document.getElementById('intMessagesLog').innerHTML = '';
+    document.getElementById('extLogTableBody').innerHTML = '';
+    appendIntMessage('[SYSTEM_RESET] Lifecycle loop completed. Logs reset for new session.');
+    appendExtLog('GATEWAY', 'SESSION_RESET: Protocol stream reset for new order cycle.');
+  }
+
+  function handleManualActionClick() {
+    const config = STATE_CONFIGS[currentStateName];
+    switchState(config.nextState);
+  }
+
+  function resetCountdown() {
+    clearInterval(countdownInterval);
+    clearTimeout(autoAdvanceTimer);
+
+    const isAutoEnabled = document.getElementById('autoAdvanceToggle').checked;
+    const timerBadge = document.getElementById('autoTimerDisplay');
+
+    if (!isAutoEnabled) {
+      timerBadge.style.display = 'none';
+      return;
+    }
+
+    const intervalSeconds = parseInt(document.getElementById('speedSelect').value, 10);
+    remainingSeconds = intervalSeconds;
+    
+    timerBadge.style.display = 'inline-block';
+    document.getElementById('countdownSecs').innerText = remainingSeconds;
+
+    countdownInterval = setInterval(() => {
+      remainingSeconds--;
+      document.getElementById('countdownSecs').innerText = remainingSeconds;
+      if (remainingSeconds <= 0) {
+        clearInterval(countdownInterval);
+      }
+    }, 1000);
+
+    autoAdvanceTimer = setTimeout(() => {
+      const config = STATE_CONFIGS[currentStateName];
+      switchState(config.nextState);
+    }, intervalSeconds * 1000);
+  }
+
+  function appendIntMessage(message) {
+    const container = document.getElementById('intMessagesLog');
+    const timestamp = new Date().toISOString().split('T')[1].slice(0, 12);
+    const logEntry = document.createElement('div');
+    
+    logEntry.className = 'log-line';
+    if (message.includes('ALERT') || message.includes('BREACH')) {
+      logEntry.className += ' err';
+    } else if (message.includes('AUTO_ADVANCE') || message.includes('RISK') || message.includes('RESET')) {
+      logEntry.className += ' warn';
+    }
+
+    logEntry.innerHTML = `<code>[${timestamp}] ${message}</code>`;
+    container.appendChild(logEntry);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function appendExtLog(target, payload) {
+    const tableBody = document.getElementById('extLogTableBody');
+    const timestamp = new Date().toISOString().split('T')[1].slice(0, 12);
+    const row = document.createElement('tr');
+
+    row.innerHTML = `
+      <td>${timestamp}</td>
+      <td><span class="broker-tag">${target}</span></td>
+      <td><code>${payload}</code></td>
+    `;
+
+    tableBody.appendChild(row);
+    const parentContainer = tableBody.closest('.terminal-log-output');
+    parentContainer.scrollTop = parentContainer.scrollHeight;
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.state-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const state = btn.getAttribute('data-state');
+        switchState(state);
+      });
+    });
+
+    document.getElementById('autoAdvanceToggle').addEventListener('change', () => {
+      resetCountdown();
+    });
+
+    document.getElementById('speedSelect').addEventListener('change', () => {
+      resetCountdown();
+    });
+  });
+</script>
+
+</body>
+</html>
